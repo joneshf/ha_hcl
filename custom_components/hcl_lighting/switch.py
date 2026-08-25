@@ -26,10 +26,10 @@ from .const import (
     CONF_SMART_TRANSITION,
     CONF_MIN_BRIGHTNESS,
     CONF_MAX_BRIGHTNESS,
+    CONF_UPDATE_INTERVAL,
     DEFAULT_MIN_BRIGHTNESS,
     DEFAULT_MAX_BRIGHTNESS,
-    UPDATE_INTERVAL_SECONDS,
-    HCL_TRANSITION_SECONDS,
+    DEFAULT_UPDATE_INTERVAL,
     CONF_WAKE_TIME,
     CONF_MIDDAY_TIME,
     CONF_SLEEP_TIME,
@@ -167,10 +167,14 @@ class HCLSwitch(RestoreEntity, SwitchEntity):
         
         # Start Timer
         if self._timer_remove_callback is None:
+            update_interval = self._entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+            update_interval_seconds = update_interval.get("hours", 0) * 60 * 60 + update_interval.get("minutes", 0) * 60 + update_interval.get("seconds", 0)
+            if not update_interval_seconds:
+                update_interval_seconds = DEFAULT_UPDATE_INTERVAL.get("seconds")
             self._timer_remove_callback = async_track_time_interval(
                 self.hass,
                 self._update_hcl, # Main Loop
-                timedelta(seconds=UPDATE_INTERVAL_SECONDS)
+                timedelta(seconds=update_interval_seconds)
             )
         
         await self._re_evaluate_targets_and_listeners()
@@ -275,11 +279,16 @@ class HCLSwitch(RestoreEntity, SwitchEntity):
                 
                 # 5. Apply Batch
                 if active_lights:
+                    update_interval = self._entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+                    update_interval_seconds = update_interval.get("hours", 0) * 60 * 60 + update_interval.get("minutes", 0) * 60 + update_interval.get("seconds", 0)
+                    if not update_interval_seconds:
+                        update_interval_seconds = DEFAULT_UPDATE_INTERVAL.get("seconds")
+                    hcl_transition_seconds = round(update_interval_seconds * 0.75) # Reduced to ensure completion before next update
                     await self.controller.apply_batch(
                         active_lights, 
                         self._calculated_brightness, 
                         self._calculated_kelvin,
-                        transition=HCL_TRANSITION_SECONDS 
+                        transition=hcl_transition_seconds 
                     )
             except Exception:
                  _LOGGER.exception("Error in HCL update loop")
